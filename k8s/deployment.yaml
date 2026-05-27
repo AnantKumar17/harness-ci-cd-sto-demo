@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: demo-app
-          image: <+{{artifact.image}}>
+          image: <+artifacts.primary.image>
           ports:
             - containerPort: 5000
           livenessProbe:
