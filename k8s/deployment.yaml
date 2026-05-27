@@ -22,8 +22,7 @@ spec:
     spec:
       containers:
         - name: demo-app
-          # Harness overrides this at runtime using <+artifact.tag>
-          image: anantkumar17/harness-demo-app:latest
+          image: anantkumar17/harness-demo-app:<+artifact.tag>
           ports:
             - containerPort: 5000
           livenessProbe:
