@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: demo-app
-          image: anantkumar17/harness-demo-app:<+artifact.tag>
+          image: <+artifact.image>
           ports:
             - containerPort: 5000
           livenessProbe:
