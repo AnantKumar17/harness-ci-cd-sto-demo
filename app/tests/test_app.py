@@ -3,9 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pytest
-from app import app as flask_app
-
+import pytest  # noqa: E402
+from app import app as flask_app  # noqa: E402
 
 @pytest.fixture
 def client():
