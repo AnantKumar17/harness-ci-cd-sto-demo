@@ -1,0 +1,48 @@
+pipeline:
+  name: pr-security-scan
+  identifier: prsecurityscan
+  projectIdentifier: Harness_Assignment_Setup
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        build: <+input>
+  stages:
+    - stage:
+        name: Shift-Left Trivy Scan
+        identifier: ShiftLeft_Trivy_Scan
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            override: true
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec:
+              imageSpec:
+                imageName: ubuntu-22
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: PR Trivy Scan
+                  identifier: PR_Trivy_Scan
+                  spec:
+                    connectorRef: dockerhub_connector
+                    image: aquasec/trivy:latest
+                    shell: Sh
+                    command: trivy fs /harness --exit-code 1 --severity CRITICAL,HIGH --no-progress
+                    imagePullPolicy: Always
+                  timeout: 10m
+        sendGitStatus:
+          enabled: true
+          name: PR-Security-Scan-Status

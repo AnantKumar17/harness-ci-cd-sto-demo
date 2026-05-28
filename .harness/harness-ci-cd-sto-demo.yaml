@@ -1,0 +1,202 @@
+pipeline:
+  name: harness-ci-cd-sto-demo
+  identifier: harnesscicdstodemo
+  projectIdentifier: Harness_Assignment_Setup
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: github_connector
+        build: <+input>
+  stages:
+    - stage:
+        name: CI- Build and Push
+        identifier: CI_Build_and_Push
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            override: true
+          buildIntelligence:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec:
+              imageSpec:
+                imageName: ubuntu-22
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Unit Tests
+                  identifier: Run_Unit_Tests
+                  spec:
+                    connectorRef: dockerhub_connector
+                    image: python:3.11-alpine
+                    shell: Sh
+                    command: |-
+                      pip install -r app/requirements.txt flake8 black
+                      black app/
+                      flake8 app/
+                      pytest app/tests/ -v
+                    imagePullPolicy: Always
+                  timeout: 10m
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push Image
+                  identifier: Build_and_Push_Image
+                  spec:
+                    connectorRef: dockerhub_connector
+                    repo: anantkumar17/harness-demo-app
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                    caching: true
+                    dockerfile: Dockerfile
+                    context: .
+                  timeout: 10m
+        timeout: 10m
+    - stage:
+        name: STO- Security Scan
+        identifier: STO_Security_Scan
+        description: ""
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Container
+                  name: Trivy Image Scan
+                  identifier: Trivy_Image_Scan
+                  spec:
+                    connectorRef: dockerhub_connector
+                    image: aquasec/trivy:latest
+                    command: |-
+                      trivy image \
+                        --exit-code 1 \
+                        --severity CRITICAL \
+                        --no-progress \
+                        anantkumar17/harness-demo-app:<+pipeline.sequenceId>
+                    shell: Sh
+                    infrastructure:
+                      type: KubernetesDirect
+                      spec:
+                        connectorRef: minikubek8sconnector
+                        namespace: harness-delegate-ng
+                        resources:
+                          limits:
+                            cpu: "0.5"
+                            memory: 500Mi
+                        annotations: {}
+                        labels: {}
+                        containerSecurityContext:
+                          capabilities:
+                            drop: []
+                            add: []
+                        nodeSelector: {}
+                        os: Linux
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths: []
+                    outputVariables: []
+                    envVariables: {}
+                    imagePullPolicy: Always
+                  timeout: 10m
+        tags: {}
+    - stage:
+        name: CD- Deploy to Kubernetes
+        identifier: CD_Deploy_to_Kubernetes
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: harnessdemoapp
+          environment:
+            environmentRef: minikube
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: minikubeinfra
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
+          execution:
+            steps:
+              - step:
+                  type: K8sApply
+                  name: Rollout Deployment
+                  identifier: Rollout_Deployment
+                  spec:
+                    skipDryRun: false
+                    skipSteadyStateCheck: false
+                    skipRendering: false
+                    overrides: []
+                    filePaths:
+                      - deployment.yaml
+                      - service.yaml
+                  timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 2
+                            retryIntervals:
+                              - 30s
+                            onRetryFailure:
+                              action:
+                                type: StageRollback
+            rollbackSteps: []
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Validation- Health Check
+        identifier: Validation_Health_Check
+        description: ""
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Health Check
+                  identifier: Health_Check
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          kubectl rollout status deployment/demo-app -n default --timeout=60s
+
+                          POD_IP=$(kubectl get svc demo-app-service -n default -o jsonpath='{.spec.clusterIP}')
+                          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$POD_IP:80/health)
+
+                          if [ "$HTTP_CODE" != "200" ]; then
+                            echo "Health check failed! HTTP code: $HTTP_CODE"
+                            exit 1
+                          fi
+
+                          echo "Health check passed! HTTP code: $HTTP_CODE"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+        tags: {}
