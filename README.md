@@ -24,9 +24,9 @@ pytest app/tests/ -v
 docker build -t harness-demo-app:latest .
 ```
 
-More documentation coming soon...
+More documentation will be added soon...
 
-*Last Updated: May 28, 2026*
+
 │  Stage 3: CD          Stage 4: Validate        │
 │  ┌─────────────┐      ┌─────────────────────┐  │
 │  │ kubectl     │ ───► │ /health check       │  │
